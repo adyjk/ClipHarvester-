@@ -1,0 +1,72 @@
+{
+  "db": "data/videos.db",
+  "retention_hours": 24,
+  "seen_retention_days": 30,
+  "performance": {
+    "max_load_pct": 70,
+    "max_workers": 5
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8765
+  },
+  "limits": {
+    "bilibili": 60,
+    "douyin": 60,
+    "zhihu": 50,
+    "tieba": 100,
+    "taptap": 100
+  },
+  "ingest": {
+    "request_interval": 1.5,
+    "jitter": 0.8,
+    "max_per_run": 120,
+    "daily_limit": 900,
+    "pages_per_query": 1,
+    "queries": [
+      "Fabric 模组开发",
+      "Minecraft 生存建筑",
+      "独立游戏 开发日志"
+    ],
+    "ranking_rids": [0, 4, 36],
+    "regions": [4, 36, 188],
+    "feed_pages": 2,
+    "related_depth": 1,
+    "related_seeds": 6,
+    "enable_search": false,
+    "enable_ranking": false,
+    "enable_related": true,
+    "content_interval": 0.6,
+    "content_workers": 2,
+    "max_duration_s": 1800,
+    "asr_max_duration_s": 900,
+    "subtitle_max_duration_s": 1800,
+    "asr_beam_size": 1,
+    "douyin_per_author": 2,
+    "cookie": ""
+  },
+  "ai": {
+    "base_url": "http://127.0.0.1:11434",
+    "model": "qwen2.5:3b",
+    "timeout": 180,
+    "max_per_run": 40,
+    "num_predict": 800
+  },
+  "tieba": {
+    "forums": ["显卡"]
+  },
+  "scoring": {
+    "weights": {
+      "interest": 1.0,
+      "recency": 0.8,
+      "engagement": 0.9,
+      "duration": 0.5,
+      "ai_quality": 1.2,
+      "keyword": 1.0
+    },
+    "recency_days": 14,
+    "duration_prefer": [180, 3600],
+    "exclude_keywords": ["广告", "带货", "抽奖"],
+    "min_duration": 30
+  }
+}

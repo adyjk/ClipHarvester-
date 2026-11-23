@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>本地视频筛选器</title>
+<style>
+  :root{
+    --bg:#0e1014; --panel:#15191f; --panel2:#1b2027; --line:#242b35;
+    --text:#e7eaf0; --muted:#8b93a6; --dim:#5d6577;
+    --accent:#6ea8fe; --good:#5dd39e; --warn:#f2c14e;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:13px/1.5 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+  }
+  a{color:inherit; text-decoration:none}
+  header{
+    position:sticky; top:0; z-index:10; background:rgba(14,16,20,.94);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
+    padding:8px 18px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+  }
+  .brand{font-weight:700; letter-spacing:.4px}
+  .brand small{color:var(--dim); font-weight:400; margin-left:6px; font-size:11.5px}
+  input[type=search],select{
+    background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    border-radius:7px; padding:5px 10px; outline:none; font-size:12.5px;
+  }
+  input[type=search]{width:340px}
+  input[type=search]:focus{border-color:var(--accent)}
+  button{
+    background:var(--panel2); color:var(--text); border:1px solid var(--line);
+    border-radius:7px; padding:5px 11px; cursor:pointer; font-size:12.5px;
+  }
+  button:hover{border-color:#3a4456; background:#222834}
+  button.primary{background:#1d3a63; border-color:#2c5691; color:#cfe1ff}
+  button:disabled{opacity:.45; cursor:not-allowed}
+  .spacer{flex:1}
+  .stat{color:var(--muted); font-size:12px; white-space:nowrap}
+  .stat b{color:var(--text); font-weight:600}
+  .hint{color:var(--dim); font-size:11.5px}
+
+  /* 紧凑行：目标一屏 10 行以上 */
+  main{padding:6px 18px 60px; overflow-x:auto; scroll-behavior:smooth}
+  .nav-arrow{
+    position:fixed; top:50%; transform:translateY(-50%);
+    width:34px; height:34px; border-radius:50%;
+    background:var(--panel); border:1px solid var(--line);
+    color:var(--muted); cursor:pointer; z-index:30;
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; line-height:1; user-select:none;
+    opacity:.55; transition:opacity .15s;
+  }
+  .nav-arrow:hover{opacity:1; color:var(--accent); border-color:var(--accent)}
+  #navL{left:10px}
+  #navR{right:10px}
+  /* 按平台分列：列数=平台数，内层网格只管列宽，横向滚动交给 main */
+  #list{
+    display:grid; gap:14px; align-items:start;
+    grid-template-columns:repeat(1, minmax(320px,1fr));
+    min-width: fit-content;
+  }
+  .col{min-width:0; display:flex; flex-direction:column}
+  .col-hd{
+    margin:0 0 4px; padding:2px 2px 6px;
+    font-size:12.5px; font-weight:600; color:var(--muted);
+    display:flex; align-items:baseline; gap:6px;
+  }
+  .col-hd .cnt{color:var(--dim); font-weight:400; font-size:11px}
+  .col-items{display:flex; flex-direction:column}
+  .row{
+    display:grid; grid-template-columns:112px 1fr; gap:11px;
+    align-items:center; padding:6px 8px; border-radius:8px;
+    border:1px solid transparent; border-bottom-color:#1b212a;
+  }
+  .row:hover{background:var(--panel); border-color:var(--line)}
+  .row.focus{background:#1a2331; border-color:var(--accent)}
+  .row.disliked{opacity:.4}
+  .thumb{
+    width:112px; height:63px; border-radius:5px; overflow:hidden;
+    background:#0b0d11; position:relative; flex:none;
+  }
+  .thumb img{width:100%; height:100%; object-fit:cover; display:block}
+  .thumb .dur{
+    position:absolute; right:3px; bottom:3px; background:rgba(0,0,0,.8);
+    color:#fff; font-size:10.5px; padding:0 4px; border-radius:3px;
+  }
+  .main{min-width:0}
+  .title{
+    font-size:14px; font-weight:600; line-height:1.35;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .row:hover .title{color:var(--accent)}
+  .meta{
+    color:var(--muted); font-size:11.5px; margin-top:1px;
+    display:flex; gap:7px; overflow:hidden; white-space:nowrap;
+  }
+  .meta .tag{color:#7f8fa8}
+  .meta .live{color:#6fcf9f}
+  .meta .pending{color:#e0a458}
+  .ai{
+    color:#b9c4d6; font-size:12.5px; margin-top:2px; line-height:1.45;
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical;
+    overflow:hidden; padding-left:7px; border-left:2px solid #2f6bb5;
+  }
+  .row.open .ai, body.expanded .ai{display:block; -webkit-line-clamp:unset}
+  .points{display:none; margin:3px 0 0; padding-left:18px; color:#9fb0c9; font-size:12px; line-height:1.5}
+  .worth{display:none; margin-top:2px; color:#7f8b99; font-size:12px}
+  .row.open .points, .row.open .worth, body.expanded .points, body.expanded .worth{display:block}
+  .row.open{background:#141a26}
+  .ai.fb{border-left-color:#333b47; color:#8d97a8}
+  .ai b{color:#dfe7f4; font-weight:600}
+  .reason{font-size:10.5px; color:var(--dim); white-space:nowrap}
+  #more{display:block; margin:14px auto; padding:7px 24px}
+  .empty{text-align:center; color:var(--dim); padding:60px 0}
+  #panel{
+    position:fixed; left:0; right:0; bottom:0; background:#11151b;
+    border-top:1px solid var(--line); padding:6px 18px 8px; font-size:12px;
+    color:var(--muted); max-height:150px; overflow:auto; display:none;
+  }
+  #panel.show{display:block}
+  #panel .hd{display:flex; justify-content:space-between; margin-bottom:3px}
+  #panel .line{font-family:Consolas,monospace; white-space:pre-wrap; font-size:11.5px}
+  .spin{display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:var(--good); margin-right:5px; animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.25}}
+  .fetchbox{
+    flex-basis:100%; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding-top:6px; border-top:1px solid var(--line);
+  }
+  .fetchbox .fb-hint{color:var(--dim); font-size:11.5px}
+  .fetchbox .pf{display:flex; align-items:center; gap:4px; color:var(--muted); font-size:12px; white-space:nowrap}
+  .fetchbox .pf input[type=checkbox]{margin:0}
+  .fetchbox .pfn{
+    width:48px; background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    border-radius:6px; padding:3px 6px; outline:none; font-size:12px;
+  }
+  #kw{width:190px}
+  #hist{
+    position:fixed; left:0; right:0; bottom:0; z-index:20;
+    background:#11151b; border-top:1px solid var(--line);
+    padding:10px 18px 14px; font-size:12px; color:var(--muted);
+    max-height:64vh; overflow:auto; display:none;
+  }
+  #hist.show{display:block}
+  #hist .hd{display:flex; justify-content:space-between; margin-bottom:6px; color:var(--text); font-weight:600}
+  #hist .item{display:flex; gap:10px; align-items:baseline; padding:4px 0; border-bottom:1px solid #1b212a}
+  #hist .item a{color:var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  #hist .item a:hover{color:var(--accent)}
+  #hist .item .src{color:var(--dim); flex:none}
+  #hist .item .ts{color:var(--dim); flex:none}
+  #hist .more{display:block; margin:10px auto 0; padding:5px 18px}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">本地视频筛选器<small>进货 / 检索分离</small></div>
+  <button id="btnHist">历史</button>
+  <input id="q" type="search" placeholder="本地检索：关键词，空格分隔（不联网）">
+  <div class="spacer"></div>
+  <div class="stat" id="stats">载入中…</div>
+  <div class="fetchbox">
+    <span class="fb-hint">进货（勾选平台 + 各自数量）：</span>
+    <label class="pf"><input type="checkbox" data-src="bilibili" checked>B站<input class="pfn" data-src="bilibili" type="number" min="0" max="60" value="30"></label>
+    <label class="pf"><input type="checkbox" data-src="douyin" checked>抖音<input class="pfn" data-src="douyin" type="number" min="0" max="60" value="30"></label>
+    <label class="pf"><input type="checkbox" data-src="zhihu">知乎<input class="pfn" data-src="zhihu" type="number" min="0" max="50" value="30"></label>
+    <label class="pf"><input type="checkbox" data-src="tieba">贴吧<input class="pfn" data-src="tieba" type="number" min="0" max="100" value="50"></label>
+    <label class="pf"><input type="checkbox" data-src="taptap">TapTap<input class="pfn" data-src="taptap" type="number" min="0" max="100" value="40"></label>
+    <input id="kw" type="search" placeholder="关键词进货（仅B站，可选）">
+    <button id="btnFetch" class="primary">开始拉取</button>
+  </div>
+</header>
+
+<button class="nav-arrow" id="navL" title="向左滚动">‹</button>
+<button class="nav-arrow" id="navR" title="向右滚动">›</button>
+<main>
+  <div id="list"></div>
+  <button id="more" style="display:none">加载更多</button>
+  <div id="empty" class="empty" style="display:none">
+    本地库还是空的。先点右上角「拉取一批」进货，再在这里慢慢挑。
+  </div>
+</main>
+
+<div id="panel">
+  <div class="hd">
+    <span id="panelTitle">任务日志</span>
+    <span style="display:flex;gap:12px;align-items:center">
+      <button id="panelStop" style="display:none">结束任务</button>
+      <span id="panelClose" style="cursor:pointer">收起 ✕</span>
+    </span>
+  </div>
+  <div id="panelLog"></div>
+</div>
+
+<div id="hist">
+  <div class="hd">
+    <span>历史记录（已拉取/刷过的内容）</span>
+    <span id="histClose" style="cursor:pointer">收起 ✕</span>
+  </div>
+  <div id="histList"></div>
+  <button id="histMore" class="more" style="display:none">加载更多</button>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const list = $('#list');
+let offset = 0, items = [], focusIdx = -1;
+const PAGE = 80;
+
+const esc = s => (s ?? '').toString()
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;');
+
+function fmtDur(s){
+  s = s|0; if(!s) return '';
+  const h = Math.floor(s/3600), m = Math.floor(s%3600/60), sec = s%60;
+  return (h? h+':'+String(m).padStart(2,'0') : m) + ':' + String(sec).padStart(2,'0');
+}
+function fmtNum(n){
+  n = n|0;
+  if(n >= 10000) return (n/10000).toFixed(1).replace(/\.0$/,'') + '万';
+  return String(n);
+}
+function fmtDate(ts){
+  if(!ts) return '';
+  const d = new Date(ts*1000), now = new Date();
+  return (d.getFullYear() === now.getFullYear())
+    ? `${d.getMonth()+1}-${d.getDate()}` : `${d.getFullYear()}-${d.getMonth()+1}`;
+}
+
+function rowHtml(v, i){
+  const s = v.summary || {};
+  const isFallback = s.engine === 'fallback';
+  const cover = v.cover_url ? '/api/thumb?u=' + encodeURIComponent(v.cover_url) : '';
+  // 有 details 就显示 details，否则退回一句话/标题
+  const intro = s.details || s.detail || s.one_line || '（暂无简介）';
+  const head = s.one_line && intro !== s.one_line ? `<b>${esc(s.one_line)}</b> ` : '';
+  const tip = [s.one_line, s.worth_watching].filter(Boolean).join('\n');
+  const tags = (v.tags || '').split(/\s+/).filter(Boolean).slice(0,3)
+      .map(t => `<span class="tag">#${esc(t)}</span>`).join('');
+  const reasons = (v.reasons || []).filter(r => !/^屏蔽/.test(r)).slice(0,2)
+      .map(r => `<span class="reason">${esc(r)}</span>`).join('');
+  const pts = (s.points || []).map(p => `<li>${esc(p)}</li>`).join('');
+  const cls = ['row'];
+  if(v.feedback === 'like') cls.push('liked');
+  if(v.feedback === 'dislike' || v.feedback === 'skip') cls.push('disliked');
+  return `
+  <a class="${cls.join(' ')}" data-i="${i}" data-id="${esc(v.id)}" href="${esc(v.url)}"
+     target="_blank" rel="noopener" title="${esc(tip)}">
+    <span class="thumb">
+      ${cover ? `<img loading="lazy" referrerpolicy="no-referrer" src="${cover}" alt="">` : ''}
+      <span class="dur">${fmtDur(v.duration_s)}</span>
+    </span>
+    <span class="main">
+      <div class="title">${esc(v.title)}</div>
+      <div class="meta">
+        <span>${esc(v.author)}</span><span>${fmtNum(v.play)} 播放</span>
+        <span>${fmtDate(v.pub_ts)}</span>
+        ${isFallback ? '<span class="tag pending">待AI</span>' : ''}${v.summary_src === 'danmaku' ? '<span class="tag live">实况</span>' : ''}${v.summary_src === 'asr' ? '<span class="tag live">转写</span>' : ''}${tags}
+        ${reasons}
+      </div>
+      <div class="ai ${isFallback ? 'fb' : ''}">${head}${esc(intro)}</div>
+      ${pts ? `<ul class="points">${pts}</ul>` : ''}
+      ${s.worth_watching ? `<div class="worth">适合：${esc(s.worth_watching)}</div>` : ''}
+    </span>
+  </a>`;
+}
+
+const PLATFORM_NAMES = {bilibili:'B站', douyin:'抖音', zhihu:'知乎热榜', tieba:'贴吧', taptap:'TapTap'};
+function platformName(s){ return PLATFORM_NAMES[s] || '其他平台'; }
+
+// 按平台分列渲染：列数=平台数，同一平台的卡片归到同一列，绝不混排
+function renderAll(){
+  const cols = new Map();
+  for(let i=0;i<items.length;i++){
+    const v = items[i];
+    const s = v.source || 'other';
+    if(!cols.has(s)) cols.set(s, []);
+    cols.get(s).push({v, i});
+  }
+  const entries = [...cols.entries()];
+  const mainEl = $('main');
+  const sx = mainEl.scrollLeft, sy = mainEl.scrollTop;
+  list.style.gridTemplateColumns = `repeat(${Math.max(1, entries.length)}, minmax(320px, 1fr))`;
+  list.innerHTML = entries.map(([s, arr]) => `
+    <section class="col">
+      <h2 class="col-hd">${platformName(s)}<span class="cnt">${arr.length}</span></h2>
+      <div class="col-items">${arr.map(({v, i}) => rowHtml(v, i)).join('')}</div>
+    </section>`).join('');
+  mainEl.scrollLeft = sx; mainEl.scrollTop = sy;
+}
+
+async function load(reset){
+  if(reset){ offset = 0; items = []; focusIdx = -1; }
+  const q = encodeURIComponent($('#q').value.trim());
+  const r = await fetch(`/api/videos?q=${q}&sort=score&source=&hide_disliked=1&served=0&limit=${PAGE}&offset=${offset}`);
+  const d = await r.json();
+  items = items.concat(d.items);
+  offset += d.items.length;
+  renderAll();
+  $('#more').style.display = (d.items.length === PAGE) ? 'block' : 'none';
+  $('#empty').style.display = items.length ? 'none' : 'block';
+  showStats(d.stats);
+}
+
+function showStats(s){
+  if(!s) return;
+  $('#stats').innerHTML =
+    `库内 <b>${s.total}</b> · 已摘要 <b>${s.summarized}</b> · 待AI <b>${s.pending||0}</b> · 喜欢 <b>${s.likes}</b> · 今日进货 <b>${s.today_fetched}</b>`;
+}
+
+async function feedback(id, action){
+  await fetch('/api/feedback', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id, action})
+  });
+  const idx = items.findIndex(v => v.id === id);
+  if(idx >= 0) items[idx].feedback = action === 'clear' ? '' : action;
+  const el = list.querySelector(`[data-id="${id}"]`);
+  if(el) el.classList.toggle('disliked', action === 'dislike');
+  const s = await (await fetch('/api/stats')).json();
+  showStats(s);
+}
+
+function focusRow(i){
+  const rows = [...list.querySelectorAll('.row')];
+  if(!rows.length) return;
+  focusIdx = Math.max(0, Math.min(rows.length-1, i));
+  rows.forEach(r => r.classList.remove('focus'));
+  const el = rows[focusIdx];
+  el.classList.add('focus');
+  el.scrollIntoView({block:'nearest', behavior:'smooth'});
+}
+
+list.addEventListener('click', e => {
+  const row = e.target.closest('.row');
+  if(!row) return;
+  e.preventDefault();
+  window.open(row.href, '_blank', 'width=1280,height=860,menubar=no,toolbar=no,location=yes,status=no,scrollbars=yes');
+});
+
+document.addEventListener('keydown', e => {
+  if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  if(e.key === 'j' || e.key === 'ArrowDown'){ e.preventDefault(); focusRow(focusIdx + 1); }
+  else if(e.key === 'k' || e.key === 'ArrowUp'){ e.preventDefault(); focusRow(focusIdx - 1); }
+});
+
+let timer = null;
+$('#q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => load(true), 260); });
+$('#more').addEventListener('click', () => load(false));
+
+// 任务日志
+let polling = null, wasRunning = false, lastLiveReload = 0;
+function pollJob(){
+  fetch('/api/job').then(r => r.json()).then(d => {
+    // 后台任务一结束就自动刷新列表，新摘要直接出现在卡片上
+    if(wasRunning && !d.running) load(true);
+    wasRunning = !!d.running;
+    // 自动总结阶段：每 20 秒刷新一次列表，总结好一条就能看到一条
+    if(d.phase === 'digest' && Date.now() - lastLiveReload > 20000){
+      lastLiveReload = Date.now();
+      load(true);
+    }
+    if(d.running || d.log.length){
+      $('#panel').classList.add('show');
+      const label = d.phase === 'digest' ? '正在自动总结这批新视频' : `正在执行：${d.running}`;
+      $('#panelTitle').innerHTML = d.running ? `<span class="spin"></span>${label}` : '上次任务日志';
+      $('#panelLog').innerHTML = d.log.map(l => `<div class="line">${esc(l)}</div>`).join('');
+      $('#panelLog').scrollTop = 1e6;
+    }
+    $('#panelStop').style.display = d.running ? '' : 'none';
+    if(d.running){
+      $('#btnFetch').disabled = true;
+      clearTimeout(polling); polling = setTimeout(pollJob, 1500);
+    } else {
+      $('#btnFetch').disabled = false;
+      $('#panelStop').disabled = false;
+      $('#panelStop').textContent = '结束任务';
+    }
+  }).catch(() => {});
+}
+$('#panelClose').onclick = () => $('#panel').classList.remove('show');
+$('#panelStop').onclick = async () => {
+  $('#panelStop').disabled = true;
+  $('#panelStop').textContent = '正在结束…';
+  try{ await fetch('/api/cancel', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}); }
+  catch(e){}
+};
+
+// 拉一批 = 清掉当前列表刷过的 + 按指定平台/数量拉新的 + 自动总结
+async function doRefresh(payload, label){
+  payload.ids = items.map(v => v.id);
+  $('#panel').classList.add('show');
+  $('#panelTitle').textContent = `正在清理并拉取 ${label}…`;
+  $('#panelLog').innerHTML = '';
+  try{
+    const r = await fetch('/api/refresh', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if(d.started === false){
+      $('#panelTitle').textContent = '已有任务在跑';
+      $('#panelLog').innerHTML = `<div class="line">当前正在执行：${esc(d.busy || '其他任务')}，请等它结束再点。</div>`;
+      return;
+    }
+    items = []; offset = 0; list.innerHTML = '';
+    $('#empty').style.display = 'none';
+    if(d.marked) $('#panelLog').innerHTML = `<div class="line">已清理 ${d.marked} 条刷过的</div>`;
+  }catch(e){
+    $('#panelTitle').textContent = '启动失败';
+    $('#panelLog').innerHTML = `<div class="line">${esc(String(e))}</div>`;
+    return;
+  }
+  pollJob();
+}
+function startFetch(){
+  const targets = {};
+  document.querySelectorAll('.pf input[type=checkbox]').forEach(cb => {
+    if(cb.checked){
+      const src = cb.dataset.src;
+      const n = parseInt(document.querySelector(`.pfn[data-src="${src}"]`).value) || 0;
+      if(n > 0) targets[src] = n;
+    }
+  });
+  if(!Object.keys(targets).length){
+    alert('至少勾选一个平台并填写数量');
+    return;
+  }
+  const keyword = $('#kw').value.trim();
+  doRefresh({targets, keyword}, keyword ? `关键词「${keyword}」` : '所选平台');
+}
+$('#btnFetch').onclick = startFetch;
+$('#navL').onclick = () => $('main').scrollBy({left:-460, behavior:'smooth'});
+$('#navR').onclick = () => $('main').scrollBy({left:460, behavior:'smooth'});
+
+// 记住进货设置（勾选平台 + 数量 + 关键词），刷新后恢复
+function savePrefs(){
+  const prefs = {kw: $('#kw').value, platforms: {}};
+  document.querySelectorAll('.pf').forEach(lb => {
+    const cb = lb.querySelector('input[type=checkbox]');
+    const n = lb.querySelector('.pfn');
+    prefs.platforms[cb.dataset.src] = {on: cb.checked, n: n.value};
+  });
+  localStorage.setItem('vf_prefs', JSON.stringify(prefs));
+}
+function loadPrefs(){
+  try{
+    const p = JSON.parse(localStorage.getItem('vf_prefs') || 'null');
+    if(!p) return;
+    if(p.kw != null) $('#kw').value = p.kw;
+    const plats = p.platforms || {};
+    document.querySelectorAll('.pf').forEach(lb => {
+      const cb = lb.querySelector('input[type=checkbox]');
+      const n = lb.querySelector('.pfn');
+      const s = plats[cb.dataset.src];
+      if(s){ cb.checked = !!s.on; if(s.n != null) n.value = s.n; }
+    });
+  }catch(e){}
+}
+document.querySelectorAll('.pf input, .pfn, #kw').forEach(el => {
+  el.addEventListener('input', savePrefs);
+  el.addEventListener('change', savePrefs);
+});
+loadPrefs();
+
+load(true);
+pollJob();
+
+// 每 5 秒刷一次统计，AI 总结进度能实时看到；服务挂了直接提示
+setInterval(() => {
+  fetch('/api/stats', {cache:'no-store'})
+    .then(r => r.json()).then(showStats)
+    .catch(() => {
+      $('#stats').innerHTML = '<span style="color:#ff7b72">服务已断开：请在终端重新运行 python main.py serve</span>';
+    });
+}, 5000);
+
+// 历史记录：拉取/刷过的内容（标题+链接），数据来自防重复拉取的去重索引
+let histOffset = 0;
+async function openHist(){
+  $('#panel').classList.remove('show');
+  $('#hist').classList.add('show');
+  await loadHist(true);
+}
+async function loadHist(reset){
+  if(reset){ histOffset = 0; $('#histList').innerHTML = ''; }
+  const r = await fetch(`/api/history?limit=200&offset=${histOffset}`);
+  const d = await r.json();
+  const frag = d.items.map(it => `
+    <div class="item">
+      <a href="${esc(it.url)}">${esc(it.title) || '（无标题）'}</a>
+      <span class="src">${esc(platformName(it.source))}</span>
+      <span class="ts">${fmtDate(it.ts)}</span>
+    </div>`).join('');
+  $('#histList').insertAdjacentHTML('beforeend', frag);
+  histOffset += d.items.length;
+  $('#histMore').style.display = (d.total > histOffset) ? 'block' : 'none';
+}
+$('#btnHist').onclick = openHist;
+$('#histClose').onclick = () => $('#hist').classList.remove('show');
+$('#histMore').onclick = () => loadHist(false);
+$('#histList').addEventListener('click', e => {
+  const a = e.target.closest('a');
+  if(!a) return;
+  e.preventDefault();
+  window.open(a.href, '_blank', 'width=1280,height=860,menubar=no,toolbar=no,location=yes,status=no,scrollbars=yes');
+});
+</script>
+</body>
+</html>
